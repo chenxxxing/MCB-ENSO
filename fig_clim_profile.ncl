@@ -189,26 +189,70 @@ df = clm_wc_dif
 df = ndim(0)
 b = clm_wc_dif
 b = 0.5
-pr_tval = clm_wc_dif
-pr_tval = (clm_wc_dif)*sqrt(ndim(0))/clm_std_wc
-clm_prob = (1.-betainc( df/(df+pr_tval^2), df/2.0, b))*100.  ; probability in %
-printMinMax(clm_prob, 0)
+p_tval = clm_wc_dif
+p_tval = (clm_wc_dif)*sqrt(ndim(0))/clm_std_wc
+; clm_prob = (1.-betainc( df/(df+p_tval^2), df/2.0, b))*100.  ; probability in %
+
+; False discovery rate
+pvals = betainc( df/(df+p_tval^2), df/2.0, b)
+pflat = ndtooned(pvals)
+
+; psort = dim_pqsort(pflat,0)
+m     = dimsizes(pflat)
+alpha = 0.05
+
+; Build thresholds and find critical p
+thresh = new(m, float)
+do k = 0, m-1
+  thresh(k) = (k+1)/tofloat(m) * alpha
+end do
+idx_ok = where(pflat .le. thresh, pflat,pflat@_FillValue)
+pcrit = max(idx_ok)
+print(pcrit)
+
+; Create FDR mask on original grid
+; now marks which gridpoints survive FDR at α=0.05
+clm_prob = where((pvals/100.0) .le. pcrit,(1-pvals)*100,-((1-pvals)*100))
 copy_VarCoords(clm_wc_dif,clm_prob)
-delete([/df,b/])
+printMinMax(clm_prob, 0)
+printVarSummary(clm_prob)
+
+delete([/df,b,pvals,idx_ok,thresh,pflat/])
 
 ndim2 = dimsizes(oclm_wc_dif)
 df = oclm_wc_dif
 df = ndim2(0)
 b = oclm_wc_dif
 b = 0.5
-pr_tval2 = oclm_wc_dif
-pr_tval2 = (oclm_wc_dif)*sqrt(ndim2(0))/oclm_std_wc
-oclm_prob = (1.-betainc( df/(df+pr_tval2^2), df/2.0, b))*100.  ; probability in %
-printMinMax(oclm_prob, 0)
+p_tval2 = oclm_wc_dif
+p_tval2 = (oclm_wc_dif)*sqrt(ndim2(0))/oclm_std_wc
+; oclm_prob = (1.-betainc( df/(df+p_tval2^2), df/2.0, b))*100.  ; probability in %
+
+; False discovery rate
+pvals = betainc( df/(df+p_tval2^2), df/2.0, b)
+pflat = ndtooned(pvals)
+
+; psort = dim_pqsort(pflat,0)
+m     = dimsizes(pflat)
+alpha = 0.05
+
+; Build thresholds and find critical p
+thresh = new(m, float)
+do k = 0, m-1
+  thresh(k) = (k+1)/tofloat(m) * alpha
+end do
+idx_ok = where(pflat .le. thresh, pflat,pflat@_FillValue)
+pcrit = max(idx_ok)
+print(pcrit)
+
+; Create FDR mask on original grid
+; now marks which gridpoints survive FDR at α=0.05
+oclm_prob = where((pvals/100.0) .le. pcrit,(1-pvals)*100,-((1-pvals)*100))
 copy_VarCoords(oclm_wc_dif,oclm_prob)
+printMinMax(oclm_prob, 0)
 printVarSummary(oclm_prob)
 
-delete([/df,b/])
+delete([/df,b,pvals,idx_ok,thresh,pflat/])
 
 ; ;----------------------------------------------------------------
 ; ; crop only Pacific ocean temp
@@ -343,6 +387,7 @@ sdres@cnLineThicknessF = 2.0
 ; sdres@cnLevels =(/-30./)
 sdres@cnFillDotSizeF       = 0.005;0.0025            ; increase dot size of contours
 sdres@cnFillOpacityF = 1.0;0.7
+sdres@tmYROn = False
 
   opt@gsnShadeFillType = "pattern"      ; pattern fill
   ; opt@gsnShadeFillScales = 0.8 ;triggers fatal:Subscript out of range, error in subscript #0
@@ -389,16 +434,16 @@ vcres@vcRefMagnitudeF         = 10;10.0;0.05;0.3;           ; define vector ref 
     res2@lbTitleString    = clm_ar@units                ; title string
 
 
-    res2@gsnLeftString = "  " ; "CESM2-CAM6 SSP245"
+    res2@gsnLeftString = "a   SSP2-4.5 (CAM)"
     plot1(0) = gsn_csm_pres_hgt(wks, clm_wc(isea,iy,:,:), res2)
     plota = gsn_csm_vector(wks, uclm_wc(isea,iy,:,:), wclm_wc(isea,iy,:,:), vcres) ;wclm_ar
     overlay(plot1(0),plota)
-    res2@gsnLeftString = "  " ;""+MODEL1
+    res2@gsnLeftString = "b   "+MODEL1
   
     plot1(1) = gsn_csm_pres_hgt(wks, clm_ar(isea,iy,:,:), res2)
     plota = gsn_csm_vector(wks, uclm_ar(isea,iy,:,:), wclm_ar(isea,iy,:,:), vcres) ;wclm_ar
     overlay(plot1(1),plota)
-    res2@gsnLeftString = "  " ;MODEL1+" - SSP245"
+    res2@gsnLeftString = "c   "+MODEL1+" - SSP2-4.5 (CAM)"
     
     plot1(2) = gsn_csm_pres_hgt(wks, clm_wc_dif(isea,iy,:,:), res2)
     plota = gsn_csm_vector(wks, uclm_wc_dif(isea,iy,:,:), wclm_wc_dif(isea,iy,:,:), vcres) ;wclm_ar

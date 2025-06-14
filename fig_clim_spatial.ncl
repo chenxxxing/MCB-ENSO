@@ -26,9 +26,9 @@ yrla = yrsa+34;(/2045,2057,2068/);2069;(/2069,2069,2069,2069 /);(/2069,2069,2097
 VARa = (/"TS","PRECC"/) ;(/"TREFHT" ,"PRECT"/);"FSNS"; "SST";(/"FSNS","PRECC"/);"photoC_TOT_zint_100m" ;(/"CLDTOT","FSNS","TS","PRECC"/);(/"Z3200-200","Z3500-500","Z3850-850"/) ;"PSL","FLNT","FSNS","CLDMED","CLDLOW","CLDHGH","OMEGA500-500"/);"AREL1000-200","CLDTOT","FSNT","FLNT","FSNS","FSNSC"/);,,"ACTREL"(/"FSNS","FSNSC"/);"cloudrs" ; "TS","PSL",,"U850","U200","V850","V200"/) ;,"pr" "ts"
 COVER_LAND = False ;True
 COUNTERMX = (/5.,8./) ;100.; (/50.,8./) ;(/0.3,50.,5.,8./) ;0.5,5.0,0.2,40,40,40,40/);40,40,40,  ;1.0,
-MODEL1 = "ARISE-SAI-1.5" ;"MCB-feed";"MCB"; "MCB-feed";
+MODEL1 = "MCB"; "ARISE-SAI-1.5" ;"MCB-feed";"MCB-feed";
 EXP1 = "SSP245"; "MCB-feedforward-1DOF";  "MCB-feedback-1DOF";
-MODEL2 = "CESM2-WACCM" ;"CAM";
+MODEL2 = "CAM";"CESM2-WACCM" ;
 EXP2 = "SSP245"
 MODEL_pi = "CESM2-WACCM" ;"CESM2" ;"CESM2";"CESM2-WACCM" ; picontrol 
 
@@ -212,15 +212,35 @@ df = clm_wc_dif
 df = ndim(0)
 b = clm_wc_dif
 b = 0.5
-pr_tval = clm_wc_dif
-pr_tval = (clm_wc_dif)*sqrt(ndim(0))/clm_std_wc
-clm_prob = (1.-betainc( df/(df+pr_tval^2), df/2.0, b))*100.  ; probability in %
-printMinMax(clm_prob, 0)
-copy_VarCoords(clm_wc_dif,clm_prob)
+p_tval = clm_wc_dif
+p_tval = (clm_wc_dif)*sqrt(ndim(0))/clm_std_wc
+; clm_prob = (1.-betainc( df/(df+p_tval^2), df/2.0, b))*100.  ; probability in %
 
+; False discovery rate
+pvals = betainc( df/(df+p_tval^2), df/2.0, b)
+pflat = ndtooned(pvals)
+
+; psort = dim_pqsort(pflat,0)
+m     = dimsizes(pflat)
+alpha = 0.05
+
+; Build thresholds and find critical p
+thresh = new(m, float)
+do k = 0, m-1
+  thresh(k) = (k+1)/tofloat(m) * alpha
+end do
+idx_ok = where(pflat .le. thresh, pflat,pflat@_FillValue)
+pcrit = max(idx_ok)
+print(pcrit)
+
+; Create FDR mask on original grid
+; now marks which gridpoints survive FDR at α=0.05
+clm_prob = where((pvals/100.0) .le. pcrit,(1-pvals)*100,-((1-pvals)*100))
+copy_VarCoords(clm_wc_dif,clm_prob)
+printMinMax(clm_prob, 0)
 printVarSummary(clm_prob)
 
-delete([/df,b/])
+delete([/df,b,pvals,idx_ok,thresh,pflat/])
 
 ;--------------plot-------------------
 ; gsn_define_colormap(wks, "NCV_blu_red") ;"NCV_blu_red" "MPL_BrBG"
@@ -395,22 +415,10 @@ res2@cnMinLevelValF        = 10 ;290.;
 ;   plota = gsn_csm_vector(wks, uclm_wc_dif(isea,0,:,:), vclm_wc_dif(isea,0,:,:), vcres) 
 ;   overlay(plot(iv),plota)
 
-    ; rsmask = gsn_csm_contour(wks, cloudrs_dif(isea,0,{-40:40},{180:300}), sdres); 
-    ; rsmask = gsn_contour_shade(rsmask,-30.,-999.,opt) 
- 
-    ; rsmask = gsn_csm_contour(wks, cloudrs_dif(isea,0,{-40:40},{180:300}), res3); 
-    ; overlay(plot(iv), rsmask)
-
     rsmask = gsn_csm_contour(wks, seedmask(isea,0,:,:), sdres); 
     rsmask = gsn_contour_shade(rsmask,-999,0.5, opt)   ; Shade contours above .5
     ; overlay(plot(iv), rsmask)
 
-    rsmask = gsn_csm_contour(wks, cloudrs_sea(isea,0,{-40:40},{180:300}), sdres); 
-    rsmask = gsn_contour_shade(rsmask,-30,-999, opt)   ; Shade contours below -30.
-    ; overlay(plot2(1), rsmask)
-    rsmask = gsn_csm_contour(wks, cloudrs_sea(isea,0,{-40:40},{180:300}), sdres); 
-    rsmask = gsn_contour_shade(rsmask,-30,-999, opt)   ; Shade contours below -30.
-    ; overlay(plot(iv), rsmask)
 
     ; end if 
 
@@ -420,7 +428,7 @@ res2@cnMinLevelValF        = 10 ;290.;
     sdres@cnFillDotSizeF       = 0.0025            ; increase dot size of contours
     sdres@cnFillOpacityF = 0.5
     opt@gsnShadeLow =  3 ;6       ;
-    plota = gsn_csm_contour(wks, clm_prob(isea,0,:,:), sdres); 
+    plota = gsn_csm_contour(wks, clm_prob(isea,0,:,:), sdres);clm_prob 
     plota = gsn_contour_shade(plota,95, -999,opt)   ; Shade contours below 95
     overlay(plot(iv), plota)
 
